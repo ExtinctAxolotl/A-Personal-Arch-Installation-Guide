@@ -23,7 +23,7 @@ The default console keymap is US. Available layouts can be listed with:
 To modify the layout, append a corresponding file name to loadkeys, omitting path and file extension. For example, to set a US keyboard layout:  
 
 ```
-# loadkeys us
+# loadkeys de
 ```
 
 ## Verify the boot mode
@@ -357,7 +357,7 @@ This command assumes the hardware clock is set to UTC.
 
 ## Localization
 
-The `locale` defines which language the system uses, and other regional considerations such as currency denomination, numerology, and character sets. Possible values are listed in `/etc/locale.gen`. Uncomment `en_US.UTF-8`, as well as other needed localisations.
+The `locale` defines which language the system uses, and other regional considerations such as currency denomination, numerology, and character sets. Possible values are listed in `/etc/locale.gen`.
 
 **Uncomment everything that begins with** `de_DE.` and **uncomment** `en_US.UTF-8` (for fallback) and other needed locales in `/etc/locale.gen`, **save**, and generate them with:  
 
