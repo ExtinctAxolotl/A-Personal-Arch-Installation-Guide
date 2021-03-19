@@ -20,7 +20,7 @@ The default console keymap is US. Available layouts can be listed with:
 # ls /usr/share/kbd/keymaps/**/*.map.gz
 ```
 
-To modify the layout, append a corresponding file name to loadkeys, omitting path and file extension. For example, to set a US keyboard layout:  
+To modify the layout, append a corresponding file name to loadkeys, omitting path and file extension. For example, to set a DE keyboard layout:  
 
 ```
 # loadkeys de
