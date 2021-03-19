@@ -1,6 +1,6 @@
 # A Personal Arch Installation Guide
 
-This is a personal guide so if you are lost and just found this guide from somewhere, I recommend you to read the official [`wiki`](https://wiki.archlinux.org/index.php/Installation_guide)!  This guide will focus on `systemd-boot`, `UEFI` and a guide if you want to encrypt your partition with `LUKS/LVM`. This guide exists so that I can remember a bunch of things when reinstalling `Archlinux`.
+This is a personal guide so if you are lost and just found this guide from somewhere, I recommend you to read the official [`wiki`](https://wiki.archlinux.org/index.php/Installation_guide)!  This guide will focus on `grub2` and `UEFI`. This is a customized fork of [`this repo`](https://github.com/manilarome/A-Personal-Arch-Installation-Guide) by https://github.com/manilarome
 
 ## Pre-installation
 
@@ -173,36 +173,6 @@ In this guide, I'll create a two different ways to partition a drive. One for a 
 
 + Lastly, hit `Write` at the bottom of the patitions list to *write the changes* to the disk. Type `yes` to *confirm* the write command. Now we are done partitioning the disk. Hit `Quit` *to exit cgdisk*. Go to the [next section](#formatting-partitions).
 
-### Encrypted filesystem with `LUKS/LVM`
-
-+ Let’s clean up our main drive to create new partitions for our installation. And yeah, in this guide, we will use `/dev/sda` as our disk.
-
-	```
-	# gdisk /dev/sda
-	```
-
-+ Press <kbd>x</kbd> to enter **expert mode**. Then press <kbd>z</kbd> to *zap* our drive. Then hit <kbd>y</kbd> when prompted about wiping out GPT and blanking out MBR. Note that this will ***zap*** your entire drive so your data will be gone - reduced to atoms after doing this. THIS. CANNOT. BE. UNDONE.
-
-+ Create our partitions by running `cgdisk /dev/sda`
-
-	```
-	# cgdisk /dev/sda
-	```
-
-+ Just press <kbd>Return</kbd> when warned about damaged GPT.
-
-	Now we should be presented with our main drive showing the partition number, partition size, partition type, and partition name. If you see list of partitions, delete all those first.
-
-+ Create the `LVM` partition
-
-	- Hit New again.
-	- Hit enter to select the default option for the first sector.
-	- Hit enter again to use the remainder of the disk.
-	- Set GUID to `8e00`. Hit enter.
-	- Set name to `lvm`. Hit enter.
-
-+ Lastly, hit `Write` at the bottom of the patitions list to *write the changes* to the disk. Type `yes` to *confirm* the write command. Now we are done partitioning the disk. Hit `Quit` *to exit cgdisk*. Go to the [next section](#formatting-partitions).
-
 
 ## Verifying the partitions
 
@@ -230,20 +200,6 @@ You should see *something like this*:
 **`sda3`** is the home partition  
 **`sda4`** is the root partition
 
-### Encrypted filesystem
-
-| NAME | MAJ:MIN | RM | SIZE | RO | TYPE | MOUNTPOINT |
-| --- | --- | --- | --- | --- | --- | --- |
-| sda | 8:0 | 0 | 477G | 0 | disk |   |
-| sda1 | 8:1 | 0 | 1 | 0 | part |   |
-| sda2 | 8:2 | 0 | 1 | 0 | part |   |
-
-**`sda`** is the main disk  
-**`sda1`** is the boot partition  
-**`sda2`** is the LVM partition
-
-**Surprise! Surprise!** We will **not** encrypt the `/boot` partition.
-
 ## Format the partitions
 
 ### Unencrypted filesystem
@@ -268,87 +224,7 @@ You should see *something like this*:
 	# mkfs.ext4 /dev/sda4
 	```
 
-### Encrypted filesystem
 
-+ Format `/dev/sda1` partition as `FAT32`. This will be our `/boot`.
-
-	```
-	# mkfs.fat -F32 /dev/sda1
-	```
-
-+ Create the LUKS encrypted container.
-
-	```
-	# cryptsetup luksFormat /dev/sda2
-	```
-
-+ Enter your passphrase twice. Don't forget this!
-
-+ Open the created container and name it whatever you want. In this guide I'll just use `cryptlvm`.
-
-	```
-	# cryptsetup open --type luks /dev/sda2 cryptlvm
-	```
-
-+ Enter your passphrase and verify it.
-
-+ The decrypted container is now available at `/dev/mapper/cryptlvm`.
-
-+ Create a physical volume on top of the opened LUKS container:
-
-	```
-	# pvcreate /dev/mapper/cryptlvm
-	```
-
-+ Create the volume group and name it `volume` (or whatever you want), adding the previously created physical volume to it:
-
-	In this guide, I'll just use `volume` as the volume group name.
-
-	```
-	# vgcreate volume /dev/mapper/cryptlvm
-	```
-
-+ Create all your needed logical volumes on the volume group. We will create a `swap`, `root`, and `home` logical volumes. Note that the `volume` is the name of the volume we just created.
-
-	- Create our `swap`. I'll assign 1GB to it.
-
-		```
-		# lvcreate -L 1G volume -n swap
-		```
-
-		This will create `/dev/mapper/volume-swap`.
-
-	- Create our `root`. In this guide, I'll use 100GB.
-
-		```
-		# lvcreate -L 100G volume -n root
-		```
-
-		This will create `/dev/mapper/volume-root`.
-
-	- Create our home sweet `home`. I'll just assign the remaining space to it.
-
-		```
-		# lvcreate -l 100%FREE volume -n home
-		```
-
-	This will create `/dev/mapper/volume-home`.
-
-+ Format the logical partitions under the LVM volume.
-
-	- Format and create our `swap`.
-
-		```
-		# mkswap /dev/mapper/volume-swap  
-		# swapon /dev/mapper/volume-swap
-		```
-
-	- Format our `root` and `home` partitions.
-
-		```
-		# mkfs.ext4 /dev/mapper/volume-root
-		# mkfs.ext4 /dev/mapper/volume-home
-		```
 
 ## Mount the filesystems
 
@@ -386,46 +262,16 @@ You should see *something like this*:
 
 	We don’t need to mount `swap` since it is already enabled.  
 
-### Encrypted partition
-
-+ Mount the `/dev/mapper/volume-root` partition to `/mnt`. This is our `/`:
-
-	```
-	# mount /dev/mapper/volume-root /mnt
-	```
-
-+ Create a `/boot` mountpoint:
-
-	```
-	# mkdir /mnt/boot  
-	```
-
-+ Mount `/dev/sda1` to `/mnt/boot` partition. This is will be our `/boot`:
-
-	```
-	# mount /dev/sda1 /mnt/boot
-	```
-
-+ Create a `/home` mountpoint:
-
-	```
-	# mkdir /mnt/home  
-	```
-
-+ Mount `/dev/mapper/volume-home` to `/mnt/home` partition. This is will be our `/home`:
-
-	```
-	# mount /dev/mapper/volume-home /mnt/home
-	```
-
-	 We don’t need to mount `swap` since it is already enabled.
 
 ## Installation
 
-Now let’s go ahead and install `base`, `linux`, `linux-firmware`, and `base-devel` packages into our system. 
+Now let’s go ahead and install `base`, `linux`, `linux-firmware`, `base-devel`, `neovim`, `dhcpcd` and `iwd` packages into our system.
+**_TIP:_** Please replace `neovim` with your [text editor](https://wiki.archlinux.org/index.php/Category:Text_editors) of choice.
+**Just make sure that it runs in the terminal or else it _won't work!_**
+Some terminal based editors are located farther down in the documentation.
 
 ```
-# pacstrap /mnt base base-devel linux linux-firmware
+# pacstrap /mnt base base-devel linux linux-firmware neovim dhcpcd iwd
 ```
 
 The `base` package does not include all tools from the live installation, so installing other packages may be necessary for a fully functional base system. In particular, consider installing: 
@@ -513,7 +359,10 @@ This command assumes the hardware clock is set to UTC.
 
 The `locale` defines which language the system uses, and other regional considerations such as currency denomination, numerology, and character sets. Possible values are listed in `/etc/locale.gen`. Uncomment `en_US.UTF-8`, as well as other needed localisations.
 
-**Uncomment** `en_US.UTF-8 UTF-8` and other needed locales in `/etc/locale.gen`, **save**, and generate them with:  
+**Uncomment everything that begins with** `de_DE.` and **uncomment** `en_US.UTF-8` (for fallback) and other needed locales in `/etc/locale.gen`, **save**, and generate them with:  
+
+
+_More info [here](https://wiki.archlinux.org/index.php/Locale#Generating_locales)_
 
 ```
 # locale-gen
@@ -528,14 +377,16 @@ Create the `locale.conf` file, and set the LANG variable accordingly:
 If you set the keyboard layout earlier, make the changes persistent in `vconsole.conf`:
 
 ```
-# echo "KEYMAP=us" > /etc/vconsole.conf
+# echo "KEYMAP=de-latin1" > /etc/vconsole.conf
 ```
 
-Not using `us` layout? Replace it, stoopid.
+Not using `de` layout? Replace it, with `us` or some other keyboard layout.
 
 ## Network configuration
 
-Create the hostname file. In this guide I'll just use `MYHOSTNAME` as hostname. Hostname is the host name of the host. Every 60 seconds, a minute passes in Africa.
+Create the hostname file. In this guide I'll just use `MYHOSTNAME` as hostname. Hostname is the host name of the host. Every 24 hours, a day passes in Africa.
+
+**_BTW:_** I would normally use `archlolotl`. This is one of the main reasons I use ARCH Linux ᕦ(⌐■⩌■)ᕥ... mmh...
 
 ```
 # echo "MYHOSTNAME" > /etc/hostname
@@ -561,55 +412,25 @@ Creating a new initramfs is usually not required, because mkinitcpio was run on 
 	# mkinitcpio -p linux
 	```
 
-### Encrypted filesystem with LVM/LUKS
 
-+ Open `/etc/mkinitcpio.conf` with an editor:
 
-+ In this guide, there are two ways to setting up initramfs, `udev` (default) and `systemd`. If you are planning to use `plymouth`(splashcreen), it is advisable to use a `systemd`-based initramfs.
+## Installing an AUR Helper
 
-	- udev-based initramfs (default).
+There are a **trillion** AUR Helpers out there. Everyone has it's own unique features and tradeoffs.
 
-		Find the `HOOKS` array, then change it to something like this:
+I use [`paru`](https://github.com/Morganamilo/paru) - [`AUR link`]
 
-		```
-		HOOKS=(base udev autodetect keyboard modconf block encrypt lvm2 filesystems fsck)
-		```
-
-	- systemd-based initramfs.
-
-		Find the `HOOKS` array, then change it to something like this:
-
-		```
-		HOOKS=(base systemd autodetect keyboard sd-vconsole modconf block sd-encrypt sd-lvm2 filesystems fsck)
-		```
-
-	- Regenerate initramfs image:
-
-		```
-		# mkinitcpio -p linux
-		```
-
-## Adding Repositories - `multilib` and `AUR`
-
-Enable multilib and AUR repositories in `/etc/pacman.conf`. Open it with your editor of choice:
-
-### Adding multilib repository
-
-Uncomment `multilib` (remove # from the beginning of the lines). It should look like this:  
-
+Clone and **install** it with:
 ```
-[multilib]
-Include = /etc/pacman.d/mirrorlist
+git clone https://aur.archlinux.org/paru-bin.git
+cd paru-bin/
+makepkg -si
 ```
-
-### Adding the AUR repository
-
-Add the following lines at the end of your `/etc/pacman.conf` to enable the AUR repo:  
-
+or Clone and **Build** it with:
 ```
-[archlinuxfr]
-SigLevel = Never
-Server = http://repo.archlinux.fr/$arch
+git clone https://aur.archlinux.org/paru.git
+cd paru/
+makepkg -si
 ```
 
 ### `pacman` easter eggs
@@ -625,15 +446,33 @@ Color
 ILoveCandy
 ```
 
+### Sudo insults
+
+You can enable sudo insults with:
+
+Run `sudo visudo`
+
+Under `# Defaults specification`: 
+
+Add:
+
+```
+Defaults insults
+```
+
+Now, whenever you run sudo and type in a wrong password, the shell will insult you.
+
+**_~~How very uselful!~~_**
+
 ### Update repositories and packages
 
-To check if you successfully added the repositories and enable the easter-eggs, run:
+To check if you successfully enabled the easter-eggs, run:
 
 ```
 # pacman -Syu
 ```
 
-If updating returns an error, open the `pacman.conf` again and check for human errors. Yes, you f'ed up big time.
+If updating returns an error, open the `pacman.conf` again and check for human errors. My pet ferret has better typing skills than you!.
 
 ## Root password
 
@@ -645,7 +484,9 @@ Set the `root` password:
 
 ## Add a user account
 
-Add a new user account. In this guide, I'll just use `MYUSERNAME` as the username of the new user aside from `root` account. (My phrasing seems redundant, eh?) Of course, change the example username with your own:  
+Add a new user account. In this guide, I'll just use `MYUSERNAME` as the username of the new user aside from `root` account.
+
+Of course, change the example username with your own:  
 
 ```
 # useradd -m -g users -G wheel,storage,power,video,audio,rfkill,input -s /bin/bash MYUSERNAME
@@ -669,84 +510,52 @@ If you want a root privilege in the future by using the `sudo` command, you shou
 
 Uncomment the line (Remove #):
 
+**Before:**
+
 ```
 # %wheel ALL=(ALL) ALL
 ```
 
+**After:**
+```
+%wheel ALL=(ALL) ALL
+```
+~~_**I'm so proud of you! You have uncommented a line! Impressive!**_~~
+
 ## Install the boot loader
 
-Yeah, this is where we install the bootloader. We will be using `systemd-boot`, so no need for `grub2`. 
-
-+ Install bootloader:
-	
-	We will install it in `/boot` mountpoint (`/dev/sda1` partition).
-
-	```
-	# bootctl --path=/boot install
-	```
-
-+ Create a boot entry `/boot/loader/entries/arch.conf`, then add these lines:
-
-### Unencrypted filesystem
-
-	```
-	title Arch Linux  
-	linux /vmlinuz-linux  
-	initrd  /initramfs-linux.img  
-	options root=/dev/sda3 rw
-	```
-
-	If your `/` is not in `/dev/sda3`, make sure to change it. 
-
-	Save and exit.
-
-### Encrypted filesystem
-
-Remember the two-types of initramfs earlier? Each type needs a specific kernel parameters. So there's also a two type of entries here. Remember that `volume` is the volume group name and `/dev/mapper/volume-root` is the path to `/`.
-
-+ udev-based initramfs
-
-	```
-	title Arch Linux  
-	linux /vmlinuz-linux  
-	initrd  /initramfs-linux.img  
-	options cryptdevice=UUID=/DEV/SDA2/UUID/HERE:volume root=/dev/mapper/volume-root rw
-	```
-
-	Replace `/DEV/SDA2/UUID/HERE` with the UUID of your `LVM` partition. You can check it by running `blkid /dev/sda2`. Note that `cryptdevice` parameter  is unsupported by plymouth so it's advisable to use systemd-based initramfs if you are planning to use it.
-
-	Tip: If you are using `vim`, you can write the UUID easier by typing `:read ! blkid /dev/sda2` then hit enter. Then manipulate the output by using visual mode.
-
-+ systemd-based initramfs
-
-	```
-	title Arch Linux
-	linux /vmlinuz-linux
-	initrd /intel-ucode.img
-	initrd /initramfs-linux.img
-	options rd.luks.name=/DEV/SDA2/UUID/HERE=volume root=/dev/mapper/volume-root rw
-	```
-
-	Replace `/DEV/SDA2/UUID/HERE` with the UUID of your `LVM` partition. You can check it by running `blkid /dev/sda2`.
-
-	Tip: If you are using `vim`, you can write the UUID easier by typing `:read ! blkid /dev/sda2` then hit enter. Then manipulate the output by using visual mode.
-
-### Update boot loader configuration
-
-Update bootloader configuration
+First, lets install grub:
 
 ```
-# vim /boot/loader/loader.conf
+pacman -S grub2 efibootmgr
 ```
 
-Delete all of its content, then replaced it by:
+### UEFI Systems
+
+If you wan't, replace `ArchLinuxGrub` with your own custom ID. **Just make sure to put the ID in between double quotes if it has spaces.**
 
 ```
-default arch.conf
-timeout 0
-console-mode max
-editor no
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=ArchLinuxGrub
 ```
+
+Aaaand create the config file
+
+```
+grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+### BIOS Systems
+
+Install grub with: (Replace _Y_ with your disk name. for example /dev/sda)
+```
+grub-install /dev/sd_Y_
+```
+
+```
+grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+
 
 ## Enable internet connection for the next boot
 
@@ -764,6 +573,6 @@ Finally, `reboot`.
 
 ##  Finale
 
-If your installation is a success, then ***yay!!!*** If not, you should start questioning your own existence. Are your parents proud of you? 
+If your installation is a success, then ~~***yay!!!***~~ **_paru!_**
 
 ## [[POST INSTALLATION]](./POST.md)		[[EXTRAS]](./EXTRAS.md)
