@@ -548,7 +548,7 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 Install grub with: (Replace _Y_ with your disk name. for example /dev/sda)
 ```
-grub-install /dev/sd_Y_
+grub-install /dev/sdY
 ```
 
 ```
